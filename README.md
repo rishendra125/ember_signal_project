@@ -7,7 +7,7 @@ Portfolio project by Rishendra Vikram Singh · rishendra125.github.io
 
 ## How to Use the Demo
 
-The live demo is at [rishendra125.github.io/ember-signal/demo.html](https://rishendra125.github.io/ember-signal/demo.html)
+The live demo is at [rishendra125.github.io/ember_signal_project/demo.html](https://rishendra125.github.io/ember_signal_project/demo.html)
 
 **Try Demo Mode (no API key needed)**
 1. Open the demo link
