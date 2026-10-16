@@ -31,9 +31,13 @@ You can get an Anthropic API key at [console.anthropic.com](https://console.anth
 
 ## What It Is
 
-Ember Signal is a personal noticing layer for relationships. Most relationship tools solve logistics (reminders, calendar nudges, CRM follow-ups). Ember Signal solves something harder: noticing when a meaningful connection is quietly drifting, before it is too late to do something natural about it.
+Ember Signal is a personal noticing layer for relationships. Most relationship tools solve logistics — reminders, calendar nudges, CRM follow-ups. Ember Signal solves something harder: noticing when a meaningful connection is quietly drifting, before it is too late to do something natural about it.
 
-Inspired by [Julie Zhuo's essay on AI and social life](https://lg.substack.com/p/what-would-make-ai-truly-social), and [Sonia Baschez's observation](https://x.com/SoniaBaschez/status/2107267198091997211) that "Silicon Valley keeps building me a husband when what I really want is a wife." The logistics layer is solved. The noticing layer is not.
+The core tension this product is built around: you do not forget the people who matter to you. You just get busy. Days turn into weeks, weeks into months, and by the time you think of someone it feels too late to reach out without it being awkward. The moment to reconnect passed without either of you noticing.
+
+Inspired by [Julie Zhuo's essay on AI and social life](https://lg.substack.com/p/what-would-make-ai-truly-social), which asks why AI has gotten so capable at productivity and so poor at the things that make life worth living — and [Sonia Baschez's observation](https://x.com/SoniaBaschez/status/2107267198091997211) that "Silicon Valley keeps building me a husband when what I really want is a wife." The point is not more efficiency. It is more human connection, assisted thoughtfully.
+
+The logistics layer is solved. Email clients, calendars, CRMs — all of them help you manage time and tasks. None of them ask: is this actually a good moment to reach out? Is there a real reason? Would this feel natural or forced? Ember Signal is built around that unanswered question.
 
 Hero tagline: *"The people who matter most are the ones you keep meaning to reach out to. Ember Signal notices before you forget."*
 
