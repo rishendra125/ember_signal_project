@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ember Signal — Demo</title>
+<meta name="description" content="A personal relationship intelligence tool. Surfaces the right moment to reach out before the connection quietly fades.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap">
+
+<style>
+/*
+  EMBER SIGNAL — GitHub / BYOK Demo
+  Author: Rishendra Vikram Singh | rishendra125.github.io
+  ─────────────────────────────────────────────────────────
+  Two modes:
+    Demo Mode  → pre-written sample drafts, no API key needed
+    My Key     → live Claude API call (api.anthropic.com/v1/messages)
+
+  ARCHITECTURE:
+    Step 1 (rule-based): flag contacts > 30 days
+    Step 2 (rule-based): filter for context signals, surface top 3
+    Step 3 (AI — user's key or demo draft): warm 2-sentence message
+
+  The key is held only in sessionStorage (clears on tab close).
+  It is sent directly to api.anthropic.com — never to any third-party server.
+  ─────────────────────────────────────────────────────────
+*/
+
+:root {
+  --bg:          #131110;
+  --surface:     #1c1916;
+  --surface-2:   #232019;
+  --border:      #2e2a25;
+  --border-soft: #241f1a;
+  --ember:       #cf6c34;
+  --ember-dim:   #a85728;
+  --ember-glow:  rgba(207,108,52,0.10);
+  --ember-glow2: rgba(207,108,52,0.20);
+  --fg:          #ede8e0;
+  --fg-muted:    #978d83;
+  --fg-dim:      #5a5149;
+  --green:       #5c9e6f;
+  --green-bg:    rgba(92,158,111,0.10);
+  --green-border:rgba(92,158,111,0.22);
+  --blue:        #5b8fc7;
+  --blue-bg:     rgba(91,143,199,0.10);
+  --blue-border: rgba(91,143,199,0.22);
+  color-scheme:  dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  padding: 0 16px;
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Header ── */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(19,17,16,0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  padding: 13px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.wordmark {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ember);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wordmark-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ember);
+  opacity: 0.6;
+  animation: ember-breathe 2.8s ease-in-out infinite;
+}
+
+@keyframes ember-breathe {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.25); }
+}
+
+.header-right { display: flex; align-items: center; gap: 10px; }
+
+.trust-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--green-bg);
+  border: 1px solid var(--green-border);
+  border-radius: 20px;
+  padding: 4px 11px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--green);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.trust-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+
+.case-link {
+  font-size: 11px;
+  color: var(--fg-dim);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 9px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.case-link:hover { color: var(--ember); border-color: var(--ember); }
+
+/* ── Main ── */
+.main { max-width: 680px; margin: 0 auto; padding: 40px 0 80px; }
+
+/* ── Mode banner ── */
+.mode-banner {
+  display: flex;
+  align-items: stretch;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 32px;
+  gap: 0;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.04em;
+  transition: all 0.18s;
+  border-right: 1px solid var(--border);
+  text-align: center;
+}
+
+.mode-tab:last-child { border-right: none; }
+.mode-tab.active { background: var(--ember-glow); color: var(--ember); }
+.mode-tab:hover:not(.active) { color: var(--fg-muted); }
+
+/* ── Key input panel ── */
+.key-panel {
+  display: none;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.key-panel.visible { display: block; }
+
+.key-panel-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin-bottom: 10px;
+}
+
+.key-row { display: flex; gap: 8px; align-items: center; }
+
+.key-input {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 10px 13px;
+  font-family: 'Inter', monospace;
+  font-size: 12px;
+  color: var(--fg);
+  outline: none;
+  transition: border-color 0.18s;
+  letter-spacing: 0.02em;
+}
+
+.key-input::placeholder { color: var(--fg-dim); font-family: 'Inter', sans-serif; letter-spacing: 0; }
+.key-input:focus { border-color: rgba(207,108,52,0.5); }
+
+.key-save-btn {
+  padding: 10px 16px;
+  background: var(--ember);
+  border: none;
+  border-radius: 7px;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s;
+  white-space: nowrap;
+}
+
+.key-save-btn:hover { background: var(--ember-dim); }
+
+.key-note {
+  font-size: 11px;
+  color: var(--fg-dim);
+  margin-top: 10px;
+  line-height: 1.6;
+}
+
+.key-note a { color: var(--ember); text-decoration: none; }
+
+.key-status {
+  display: none;
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--green);
+}
+
+.key-status.visible { display: block; }
+
+/* ── Demo notice ── */
+.demo-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--blue-bg);
+  border: 1px solid var(--blue-border);
+  border-radius: 8px;
+  margin-bottom: 24px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+
+.demo-notice-icon { color: var(--blue); font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.demo-notice strong { color: var(--blue); }
+.demo-notice a { color: var(--blue); text-decoration: none; }
+
+/* ── Hero ── */
+.hero { text-align: center; padding: 52px 0 44px; }
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--ember);
+  margin-bottom: 20px;
+}
+
+.hero-eyebrow::before,
+.hero-eyebrow::after {
+  content: "";
+  display: block;
+  width: 28px;
+  height: 1px;
+  background: var(--ember);
+  opacity: 0.4;
+}
+
+.hero h1 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(24px, 4.5vw, 36px);
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--fg);
+  text-wrap: balance;
+  margin-bottom: 16px;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero h1 em { color: var(--ember); font-style: italic; }
+
+.hero-sub {
+  color: var(--fg-muted);
+  font-size: 13px;
+  line-height: 1.75;
+  max-width: 380px;
+  margin: 0 auto 36px;
+}
+
+/* ── Stats ── */
+.stats {
+  display: flex;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 36px;
+}
+
+.stat { flex: 1; padding: 18px 10px; text-align: center; border-right: 1px solid var(--border); }
+.stat:last-child { border-right: none; }
+
+.stat-value {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+  margin-bottom: 5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ember);
+}
+
+.stat:last-child .stat-value { color: var(--green); }
+
+.stat-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* ── Scan button ── */
+.scan-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 32px;
+  background: var(--ember);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.18s, transform 0.1s;
+}
+
+.scan-btn:hover:not(:disabled) { background: var(--ember-dim); }
+.scan-btn:active:not(:disabled) { transform: scale(0.98); }
+.scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Contacts ── */
+.contacts-section { margin-top: 44px; }
+
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.threshold-tag {
+  background: var(--ember-glow);
+  border: 1px solid rgba(207,108,52,0.2);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 10px;
+  color: var(--ember);
+  letter-spacing: 0.06em;
+}
+
+.contact-list { display: flex; flex-direction: column; gap: 2px; }
+
+.contact-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border-radius: 7px;
+  background: var(--surface);
+  border: 1px solid transparent;
+  transition: background 0.3s, border-color 0.3s, opacity 0.5s;
+  position: relative;
+  overflow: hidden;
+}
+
+.contact-row.scanning  { border-color: rgba(207,108,52,0.35); background: var(--ember-glow); }
+.contact-row.flagged   { border-color: rgba(207,108,52,0.45); background: var(--ember-glow2); animation: flag-pulse 1.8s ease; }
+.contact-row.quiet     { opacity: 0.38; }
+.contact-row.no-signal { opacity: 0.52; border-color: rgba(207,108,52,0.12); }
+
+.no-signal-tag {
+  display: none;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--fg-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.contact-row.no-signal .no-signal-tag { display: block; }
+.contact-row.no-signal .contact-flag  { display: none; }
+
+@keyframes flag-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(207,108,52,0.45); }
+  40%  { box-shadow: 0 0 0 7px rgba(207,108,52,0); }
+  100% { box-shadow: none; }
+}
+
+.scan-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: linear-gradient(to bottom, transparent, var(--ember), transparent);
+  opacity: 0;
+}
+
+.contact-row.scanning .scan-bar {
+  opacity: 1;
+  animation: bar-sweep 0.55s ease forwards;
+}
+
+@keyframes bar-sweep {
+  from { left: -3px; opacity: 0.9; }
+  to   { left: 101%;  opacity: 0; }
+}
+
+.contact-avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600;
+  color: var(--fg-muted);
+  flex-shrink: 0;
+  font-family: 'Playfair Display', serif;
+  transition: border-color 0.3s, color 0.3s;
+}
+
+.contact-row.flagged .contact-avatar {
+  border-color: var(--ember);
+  color: var(--ember);
+  background: var(--ember-glow);
+}
+
+.contact-info { flex: 1; min-width: 0; }
+
+.contact-name {
+  font-size: 14px; font-weight: 500; color: var(--fg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.contact-meta { font-size: 11px; color: var(--fg-dim); margin-top: 1px; }
+
+.contact-days {
+  font-size: 12px; font-weight: 500; color: var(--fg-dim);
+  font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0;
+  transition: color 0.3s;
+}
+
+.contact-row.flagged .contact-days { color: var(--ember); }
+
+.contact-flag {
+  font-size: 10px; color: var(--ember);
+  opacity: 0; transition: opacity 0.4s; flex-shrink: 0;
+}
+
+.contact-row.flagged .contact-flag { opacity: 1; }
+
+/* ── Scan status ── */
+.scan-status {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 7px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  font-size: 12px;
+  color: var(--fg-muted);
+  display: none;
+  min-height: 38px;
+}
+
+.scan-status.visible { display: block; }
+.scan-status strong { color: var(--ember); }
+
+/* ── Results ── */
+.results-section { margin-top: 44px; display: none; }
+.results-section.visible { display: block; }
+
+.results-intro { margin-bottom: 20px; }
+
+.results-intro h2 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 20px; font-weight: 400;
+  color: var(--fg); margin-bottom: 6px; text-wrap: balance;
+}
+
+.results-intro p { font-size: 13px; color: var(--fg-muted); line-height: 1.65; }
+
+/* ── Flagged card ── */
+.flagged-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  transition: border-color 0.2s;
+}
+
+.flagged-card:hover { border-color: rgba(207,108,52,0.4); }
+
+.card-header { padding: 18px 18px 14px; }
+
+.card-top {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 14px;
+}
+
+.card-avatar {
+  width: 42px; height: 42px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 600;
+  font-family: 'Playfair Display', serif;
+  border: 1px solid var(--ember); color: var(--ember);
+  background: var(--ember-glow); flex-shrink: 0;
+}
+
+.card-identity { flex: 1; min-width: 0; }
+.card-name { font-size: 15px; font-weight: 600; color: var(--fg); }
+.card-relation { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
+
+.card-badge {
+  background: var(--ember-glow);
+  border: 1px solid rgba(207,108,52,0.28);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px; font-weight: 600;
+  color: var(--ember);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap; flex-shrink: 0;
+}
+
+.card-signal {
+  display: flex; gap: 10px;
+  padding: 11px 13px;
+  background: var(--surface-2);
+  border-radius: 7px;
+  border-left: 2px solid var(--ember);
+}
+
+.signal-inner { min-width: 0; }
+
+.signal-label {
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ember); margin-bottom: 3px;
+}
+
+.signal-text { font-size: 13px; color: var(--fg-muted); line-height: 1.55; }
+
+/* ── Draft area ── */
+.card-draft {
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.draft-btn {
+  width: 100%;
+  padding: 11px 18px;
+  background: transparent;
+  border: 1px solid rgba(207,108,52,0.5);
+  border-radius: 7px;
+  color: var(--ember);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+}
+
+.draft-btn:hover:not(:disabled) { background: var(--ember-glow); border-color: var(--ember); }
+.draft-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.draft-output { display: none; margin-top: 13px; }
+.draft-output.visible { display: block; }
+
+.draft-label {
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--fg-dim); margin-bottom: 8px;
+}
+
+.draft-text {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 14px; line-height: 1.75;
+  color: var(--fg); min-height: 64px;
+  font-style: italic;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 400;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.draft-text.loading::after {
+  content: "▋";
+  animation: cursor-blink 0.75s step-end infinite;
+  color: var(--ember);
+  font-style: normal;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.draft-mode-tag {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  margin-bottom: 8px;
+}
+
+.draft-mode-tag.demo-tag { color: var(--blue); background: var(--blue-bg); border: 1px solid var(--blue-border); }
+.draft-mode-tag.live-tag { color: var(--green); background: var(--green-bg); border: 1px solid var(--green-border); }
+
+.draft-actions { display: flex; gap: 7px; margin-top: 9px; }
+
+.copy-btn, .regen-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: all 0.18s;
+}
+
+.copy-btn {
+  flex: 1;
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--fg-muted);
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+
+.copy-btn:hover { border-color: var(--ember); color: var(--ember); }
+.copy-btn.copied { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+
+.regen-btn {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--fg-dim);
+}
+
+.regen-btn:hover:not(:disabled) { color: var(--fg-muted); }
+.regen-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ── Footer ── */
+.footer {
+  margin-top: 56px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-soft);
+  text-align: center;
+  font-size: 11px;
+  color: var(--fg-dim);
+  letter-spacing: 0.05em;
+}
+
+.footer a { color: var(--ember); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+/* ── Error ── */
+.err-text { font-style: normal; color: #c07060; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.1ms !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════ -->
+<!--   EMBER SIGNAL  ·  GitHub / BYOK Demo      -->
+<!-- ══════════════════════════════════════════ -->
+
+<div style="max-width:680px;margin:0 auto;">
+  <header class="header">
+    <div class="wordmark">
+      <span class="wordmark-dot"></span>
+      Ember Signal
+    </div>
+    <div class="header-right">
+      <div class="trust-badge">
+        <div class="trust-dot"></div>
+        0 messages sent automatically
+      </div>
+      <a class="case-link" href="index.html">Case study →</a>
+    </div>
+  </header>
+</div>
+
+<div class="main">
+
+  <!-- Mode selector -->
+  <div class="mode-banner" role="tablist" aria-label="Demo mode">
+    <button class="mode-tab active" id="tabDemo" role="tab" aria-selected="true" onclick="setMode('demo')">
+      Try Demo Mode
+    </button>
+    <button class="mode-tab" id="tabKey" role="tab" aria-selected="false" onclick="setMode('key')">
+      Use My API Key
+    </button>
+  </div>
+
+  <!-- Demo notice -->
+  <div class="demo-notice" id="demoNotice">
+    <span class="demo-notice-icon">ℹ</span>
+    <span>
+      <strong>Demo mode.</strong>
+      Draft messages are pre-written samples — no API key required.
+      Switch to <strong>Use My API Key</strong> to generate real drafts via Claude.
+    </span>
+  </div>
+
+  <!-- Key panel (hidden in demo mode) -->
+  <div class="key-panel" id="keyPanel">
+    <div class="key-panel-label">Anthropic API Key</div>
+    <div class="key-row">
+      <input
+        class="key-input"
+        id="keyInput"
+        type="password"
+        placeholder="sk-ant-api03-…"
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <button class="key-save-btn" onclick="saveKey()">Save for session</button>
+    </div>
+    <div class="key-note">
+      Your key is stored in <code>sessionStorage</code> — it clears when you close this tab.
+      It is sent directly to <code>api.anthropic.com</code> — never to any other server.
+      Calls are visible in DevTools Network tab; this is standard for BYOK tools.
+      Get a key at <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>.
+    </div>
+    <div class="key-status" id="keyStatus">✓ Key saved for this session — drafts will use claude-haiku-4-5</div>
+  </div>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-eyebrow">Relationship Intelligence</div>
+    <h1>The people who matter most are the ones you keep <em>meaning to reach out to</em></h1>
+    <p class="hero-sub">
+      Ember Signal notices when a connection is going quiet, finds the right moment, and makes it easy enough to actually do something about it.
+    </p>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value">10</div>
+        <div class="stat-label">Contacts scanned</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">3</div>
+        <div class="stat-label">Surfaced per run</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">0</div>
+        <div class="stat-label">Sent automatically</div>
+      </div>
+    </div>
+
+    <button class="scan-btn" id="scanBtn" onclick="startScan()">
+      ◆ &nbsp;Scan for quiet connections
+    </button>
+  </section>
+
+  <!-- Contact list -->
+  <section class="contacts-section">
+    <div class="section-label">
+      <span>Your connections · synthetic demo dataset</span>
+      <span class="threshold-tag">threshold: 30 days</span>
+    </div>
+    <div class="contact-list" id="contactList"></div>
+    <div class="scan-status" id="scanStatus"></div>
+  </section>
+
+  <!-- Results -->
+  <section class="results-section" id="resultsSection">
+    <div class="results-intro">
+      <h2>Three connections worth warming up</h2>
+      <p>These are the people who've gone quiet longest — with a real moment to reach out, not just a reminder. Draft a message, edit it, send it yourself.</p>
+    </div>
+    <div id="flaggedCards"></div>
+  </section>
+
+  <footer class="footer">
+    <a href="https://rishendra125.github.io" target="_blank" rel="noopener">Rishendra Vikram Singh</a>
+    &nbsp;·&nbsp; Emerging AI Orchestrator &nbsp;·&nbsp;
+    <a href="index.html">Case study →</a>
+    &nbsp;·&nbsp;
+    <a href="https://rishendra125.github.io" target="_blank" rel="noopener">Portfolio →</a>
+  </footer>
+
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   EMBER SIGNAL — Core logic (self-contained, no dependencies)
+
+   Two modes:
+     demo  → DEMO_DRAFTS pre-written text, no API call
+     key   → live POST to api.anthropic.com/v1/messages
+
+   Steps:
+     1 flagContacts()  — rule-based threshold scan
+     2 surfaceTop()    — rule-based signal filter + rank
+     3 draftMessage()  — demo text OR live Claude API call
+   ══════════════════════════════════════════════════════════ */
+
+// ── Synthetic dataset ──────────────────────────────────────
+const CONTACTS = [
+  {
+    id: 1, name: "Dr. Sunita Kapoor", initials: "SK",
+    relation: "Mentor", days: 61,
+    notes: "Guided my transition from PMO Director to AI Product. Deeply invested in my learning path. We met at an AI conference.",
+    signals: [{ type: "anniversary", text: "This October marks two years since she first agreed to mentor you. She doesn't know you've been counting." }]
+  },
+  {
+    id: 2, name: "Priya Sharma", initials: "PS",
+    relation: "College friend", days: 47,
+    notes: "Met at BITS Pilani. Both moved to Noida around the same time. Love filter coffee and unplanned conversations.",
+    signals: [{ type: "birthday", text: "Her birthday is October 22nd — six days from now. You once made her a playlist for it. She still talks about it." }]
+  },
+  {
+    id: 3, name: "James Chen", initials: "JC",
+    relation: "Conference connection", days: 44,
+    notes: "Met at ProductCon 2025. Both building in the AI PM space. Sharp thinker on agent architecture. Been following each other's work.",
+    signals: [{ type: "shared_interest", text: "He posted about the Instinct $1B raise last week — exactly the space you've been writing about. A real conversation starter." }]
+  },
+  {
+    id: 4, name: "Arjun Mehta", initials: "AM",
+    relation: "Former colleague", days: 52,
+    notes: "Worked on a product launch together. Very sharp delivery mind.",
+    signals: []
+  },
+  {
+    id: 5, name: "Ravi Nair", initials: "RN",
+    relation: "Cousin", days: 38,
+    notes: "Big cricket fan. IND vs AUS series coming up. Always good for a long call.",
+    signals: []
+  },
+  {
+    id: 6, name: "Neha Gupta", initials: "NG",
+    relation: "Neighbour", days: 35,
+    notes: "Kids the same age. Moved to the same Noida sector last year. Keep meaning to have them over.",
+    signals: []
+  },
+  {
+    id: 7,  name: "Tom Williams",  initials: "TW", relation: "LinkedIn connection", days: 12, notes: "Ex-Thoughtworks. Stays in regular touch.", signals: [] },
+  {
+    id: 8,  name: "Ananya Roy",    initials: "AR", relation: "Book club",           days: 18, notes: "Monthly book club. Just finished Kazuo Ishiguro.",       signals: [] },
+  {
+    id: 9,  name: "Siddharth Rao", initials: "SR", relation: "Gym buddy",           days: 8,  notes: "See him almost every morning.",                          signals: [] },
+  {
+    id: 10, name: "Meera Patel",   initials: "MP", relation: "School friend",       days: 15, notes: "WhatsApp regularly. Lives in Mumbai now.",                signals: [] }
+];
+
+const THRESHOLD = 30;
+const SURFACE_N = 3;
+
+// Pre-written demo drafts (shown in Demo mode)
+const DEMO_DRAFTS = {
+  1: "It's been a little while, and I realised this October marks two years since you first said yes to mentoring me — something I've quietly been keeping track of. I'm grateful for that more than I usually remember to say.",
+  2: "I keep thinking about the fact that your birthday is a few days away and we haven't caught up in over a month — that feels like a good reason to fix both. Hope you're doing well, and I'd love to catch up soon.",
+  3: "I saw your post on the Instinct raise and immediately thought of our ProductCon conversation — it feels like the exact space we were both watching closely. Would be good to swap notes on where you think the agent layer goes from here."
+};
+
+// ── State ─────────────────────────────────────────────────
+let currentMode = 'demo'; // 'demo' | 'key'
+let scanRunning  = false;
+
+const surfaced    = surfaceTop(flagContacts(CONTACTS, THRESHOLD), SURFACE_N);
+const surfacedIds = new Set(surfaced.map(c => c.id));
+
+// ── Steps 1 & 2: pure rule-based (no AI) ──────────────────
+function flagContacts(contacts, threshold) {
+  return contacts.filter(c => c.days > threshold);
+}
+
+function surfaceTop(flagged, n) {
+  return flagged
+    .filter(c => c.signals.length > 0)
+    .sort((a, b) => b.days - a.days)
+    .slice(0, n);
+}
+
+// ── Mode toggle ────────────────────────────────────────────
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('tabDemo').classList.toggle('active', mode === 'demo');
+  document.getElementById('tabKey').classList.toggle('active',  mode === 'key');
+  document.getElementById('tabDemo').setAttribute('aria-selected', mode === 'demo');
+  document.getElementById('tabKey').setAttribute('aria-selected',  mode === 'key');
+  document.getElementById('keyPanel').classList.toggle('visible',   mode === 'key');
+  document.getElementById('demoNotice').style.display = mode === 'demo' ? '' : 'none';
+}
+
+// ── Key management ─────────────────────────────────────────
+function saveKey() {
+  const val = document.getElementById('keyInput').value.trim();
+  if (!val) return;
+  try { sessionStorage.setItem('ember_api_key', val); } catch { /* ignore */ }
+  document.getElementById('keyStatus').className = 'key-status visible';
+  document.getElementById('keyInput').value = '••••••••••••••••••••';
+}
+
+function getKey() {
+  try { return sessionStorage.getItem('ember_api_key') || ''; } catch { return ''; }
+}
+
+// ── Render contact rows ────────────────────────────────────
+function renderContacts() {
+  const list = document.getElementById('contactList');
+  list.innerHTML = CONTACTS.map(c => `
+    <div class="contact-row" id="row-${c.id}">
+      <div class="scan-bar"></div>
+      <div class="contact-avatar">${escHtml(c.initials)}</div>
+      <div class="contact-info">
+        <div class="contact-name">${escHtml(c.name)}</div>
+        <div class="contact-meta">${escHtml(c.relation)}</div>
+      </div>
+      <div class="contact-days">${c.days}d ago</div>
+      <div class="no-signal-tag">no moment yet</div>
+      <div class="contact-flag">◆</div>
+    </div>
+  `).join('');
+}
+
+// ── Scan animation ─────────────────────────────────────────
+async function startScan() {
+  if (scanRunning) return;
+  scanRunning = true;
+
+  const btn    = document.getElementById('scanBtn');
+  const status = document.getElementById('scanStatus');
+
+  btn.disabled    = true;
+  btn.textContent = '◆  Scanning…';
+
+  CONTACTS.forEach(c => { document.getElementById(`row-${c.id}`).className = 'contact-row'; });
+  document.getElementById('resultsSection').className = 'results-section';
+
+  status.className = 'scan-status visible';
+
+  for (const c of CONTACTS) {
+    const row      = document.getElementById(`row-${c.id}`);
+    const noMoment = c.days > THRESHOLD && !surfacedIds.has(c.id);
+    status.innerHTML = `Checking <strong>${escHtml(c.name)}</strong> — ${c.days} days ago${noMoment ? ' · <em style="color:var(--fg-dim)">no context signal</em>' : ''}`;
+    row.classList.add('scanning');
+    await sleep(460);
+    row.classList.remove('scanning');
+
+    if (surfacedIds.has(c.id)) {
+      row.classList.add('flagged');
+    } else if (c.days > THRESHOLD) {
+      row.classList.add('no-signal');
+    } else {
+      row.classList.add('quiet');
+    }
+    await sleep(60);
+  }
+
+  status.innerHTML = `Scan complete — <strong>3 connections</strong> need your attention.`;
+  await sleep(700);
+  status.className = 'scan-status';
+
+  showResults();
+  btn.innerHTML = '◆ &nbsp;Scan again';
+  btn.disabled  = false;
+  scanRunning   = false;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Render result cards ────────────────────────────────────
+function showResults() {
+  const container = document.getElementById('flaggedCards');
+  container.innerHTML = surfaced.map(c => `
+    <div class="flagged-card" id="card-${c.id}">
+      <div class="card-header">
+        <div class="card-top">
+          <div class="card-avatar">${escHtml(c.initials)}</div>
+          <div class="card-identity">
+            <div class="card-name">${escHtml(c.name)}</div>
+            <div class="card-relation">${escHtml(c.relation)}</div>
+          </div>
+          <div class="card-badge">${c.days} days quiet</div>
+        </div>
+        <div class="card-signal">
+          <div class="signal-inner">
+            <div class="signal-label">The moment</div>
+            <div class="signal-text">${escHtml(c.signals[0].text)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="card-draft">
+        <button class="draft-btn" id="draftBtn-${c.id}" onclick="draftMessage(${c.id})">
+          ✦ &nbsp;Draft a warm message
+        </button>
+        <div class="draft-output" id="draftOutput-${c.id}">
+          <div class="draft-mode-tag" id="draftTag-${c.id}"></div>
+          <div class="draft-label">Suggested message — edit before you send</div>
+          <div class="draft-text" id="draftText-${c.id}"></div>
+          <div class="draft-actions">
+            <button class="copy-btn" id="copyBtn-${c.id}" onclick="copyDraft(${c.id})">Copy message</button>
+            <button class="regen-btn" id="regenBtn-${c.id}" onclick="draftMessage(${c.id})" title="Draft another version">↺</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  const section = document.getElementById('resultsSection');
+  section.className = 'results-section visible';
+  setTimeout(() => section.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+}
+
+// ── Step 3: draft message ──────────────────────────────────
+async function draftMessage(contactId) {
+  const c       = CONTACTS.find(x => x.id === contactId);
+  const btn     = document.getElementById(`draftBtn-${contactId}`);
+  const output  = document.getElementById(`draftOutput-${contactId}`);
+  const textEl  = document.getElementById(`draftText-${contactId}`);
+  const tagEl   = document.getElementById(`draftTag-${contactId}`);
+  const copyBtn = document.getElementById(`copyBtn-${contactId}`);
+  const regenBtn= document.getElementById(`regenBtn-${contactId}`);
+
+  btn.disabled = true;
+  if (regenBtn) regenBtn.disabled = true;
+  btn.innerHTML = '✦ &nbsp;Drafting…';
+  textEl.textContent = '';
+  textEl.className   = 'draft-text loading';
+  output.className   = 'draft-output visible';
+  copyBtn.className  = 'copy-btn';
+  copyBtn.textContent= 'Copy message';
+  tagEl.textContent  = '';
+  tagEl.className    = 'draft-mode-tag';
+
+  const mode = currentMode;
+
+  if (mode === 'demo') {
+    // Demo mode: use pre-written draft
+    await sleep(900); // simulate thinking
+    const text = DEMO_DRAFTS[contactId] || 'Sample draft not available for this contact.';
+    textEl.className   = 'draft-text';
+    textEl.textContent = text;
+    tagEl.className    = 'draft-mode-tag demo-tag';
+    tagEl.textContent  = 'Demo draft';
+
+  } else {
+    // Key mode: live Claude API call
+    const apiKey = getKey();
+    if (!apiKey) {
+      textEl.className   = 'draft-text err-text';
+      textEl.textContent = 'No API key saved. Paste your key above and click Save.';
+      textEl.style.fontStyle = 'normal';
+      btn.disabled = false;
+      if (regenBtn) regenBtn.disabled = false;
+      btn.innerHTML = '✦ &nbsp;Draft a warm message';
+      return;
+    }
+
+    const prompt = `Write a short, warm personal message from me to ${c.name}.
+
+Relationship: ${c.relation}
+Days since we last spoke: ${c.days}
+What I know about them: ${c.notes}
+The specific moment or reason: ${c.signals[0].text}
+
+Instructions:
+- Write exactly 2 sentences. No more. Do not write a third sentence under any circumstances.
+- Reference the specific moment naturally — woven in, not stated as a subject
+- Warm and genuine, not gushing. The kind of message someone sends without editing it first.
+- Do not open with "Hey", "Hi [name]", or any name-first greeting
+- Do not mention AI or that this was drafted by a tool
+- Write only the message text, nothing else`;
+
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5',
+          max_tokens: 200,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `API error ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      const text = data?.content?.[0]?.text?.trim() || '';
+
+      textEl.className   = 'draft-text';
+      textEl.textContent = text;
+      tagEl.className    = 'draft-mode-tag live-tag';
+      tagEl.textContent  = 'Live draft · claude-haiku-4-5';
+
+    } catch (err) {
+      textEl.className   = 'draft-text err-text';
+      textEl.style.fontStyle = 'normal';
+      if (err.message && err.message.includes('401')) {
+        textEl.textContent = 'Invalid API key. Check your key and try again.';
+      } else if (err.message && err.message.includes('429')) {
+        textEl.textContent = 'Rate limited — wait a moment and try again.';
+      } else {
+        textEl.textContent = `Could not generate a draft: ${err.message || 'unknown error'}`;
+      }
+    }
+  }
+
+  btn.disabled = false;
+  if (regenBtn) regenBtn.disabled = false;
+  btn.innerHTML = '✦ &nbsp;Draft another version';
+}
+
+// ── Copy ───────────────────────────────────────────────────
+async function copyDraft(contactId) {
+  const textEl  = document.getElementById(`draftText-${contactId}`);
+  const copyBtn = document.getElementById(`copyBtn-${contactId}`);
+  const text = textEl.textContent.trim();
+  if (!text || textEl.classList.contains('loading')) return;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    copyBtn.className   = 'copy-btn copied';
+    copyBtn.textContent = '✓  Copied';
+    setTimeout(() => {
+      copyBtn.className   = 'copy-btn';
+      copyBtn.textContent = 'Copy message';
+    }, 2200);
+  } catch {
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(textEl);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      copyBtn.textContent = 'Text selected — copy manually';
+    } catch { /* silent */ }
+  }
+}
+
+// ── Util ───────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Init ───────────────────────────────────────────────────
+renderContacts();
+
+// Restore key hint if already saved
+try {
+  if (sessionStorage.getItem('ember_api_key')) {
+    document.getElementById('keyStatus').className = 'key-status visible';
+  }
+} catch { /* ignore */ }
+</script>
+
+</body>
+</html>
