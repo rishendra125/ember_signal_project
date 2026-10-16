@@ -41,7 +41,7 @@ Hero tagline: *"The people who matter most are the ones you keep meaning to reac
 
 ## Live Demo Screenshot
 
-![Ember Signal demo — all three contacts surfaced and drafted](demo-screenshot.jpg)
+![Ember Signal demo — all three contacts surfaced and drafted](demo-screenshot.jpeg)
 
 ---
 
